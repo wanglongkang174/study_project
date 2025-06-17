@@ -34,11 +34,13 @@ int main()
         else
         {
             // TODO: 在此处为应用程序的行为编写代码。
+            
         }
     }
     else
     {
         // TODO: 更改错误代码以符合需要
+        //
         wprintf(L"错误: GetModuleHandle 失败\n");
         nRetCode = 1;
     }
