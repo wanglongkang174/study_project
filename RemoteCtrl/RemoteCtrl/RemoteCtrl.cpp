@@ -8,6 +8,7 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+#include "ServerSocket.h"
 
 
 // 唯一的应用程序对象
@@ -34,7 +35,25 @@ int main()
         else
         {
             // TODO: 在此处为应用程序的行为编写代码。
-            
+			CServerSocket* pserver = CServerSocket::getInstance(); // 获取单例实例
+            if (pserver->InitSocket() == false) {
+					MessageBox(NULL, _T("Socket环境初始化失败,检查网络设置"), _T("初始化错误"), MB_OK | MB_ICONERROR);
+					exit(0);
+            }
+            int count = 0;
+            if (pserver) {
+                if (pserver->AcceptClient() == false) {
+                if (count >= 3) {
+                    MessageBox(NULL, _T("多次无法接入，退出"), _T("连接错误"), MB_OK | MB_ICONERROR);
+					exit(0);
+                }
+					MessageBox(NULL, _T("客户端连接失败"), _T("连接错误"), MB_OK | MB_ICONERROR);
+                    count++;
+                    
+                }
+            }
+			int ret = pserver->DealCommand();
+
         }
     }
     else
