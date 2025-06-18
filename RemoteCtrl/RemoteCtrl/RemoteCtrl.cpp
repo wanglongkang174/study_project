@@ -44,6 +44,8 @@ int MakeDriverInfo() {
 }
 #include <io.h>
 #include <atlimage.h>
+#pragma warning(disable:4966) // fopen sprintf strcpy strstr 
+#pragma warning(disable:4996) // fopen sprintf strcpy strstr 
 int MakeDirectoryInfo() {
     string path;
     if (CServerSocket::getInstance()->GetFilePath(path) == -1) {
@@ -95,7 +97,7 @@ int RunFile() {
     CServerSocket::getInstance()->Send(pack);
     return 0;
 }
-#pragma warning(disable:4966) // fopen sprintf strcpy strstr 
+
 int DownloadFile() {
     std::string strPath;
     CServerSocket::getInstance()->GetFilePath(strPath);
