@@ -3,6 +3,7 @@
 #include "framework.h"
 #pragma pack(push)
 #pragma pack(1)
+void Dump(BYTE* pData, size_t nSize);
 class CPacket
 {
 public:
@@ -104,34 +105,66 @@ public:
 	std::string strOut;//整个包的数据
 };
 #pragma pack(pop)
+typedef struct MouseEvent {
+	MouseEvent() {
+		nAction = 0;
+		nButton = -1;
+		ptXY.x = 0;
+		ptXY.y = 0;
+	}
+	WORD nAction;//点击、移动、双击
+	WORD nButton;//左键、右键、中键
+	POINT ptXY;//坐标
+}MOUSEEV, * PMOUSEEV;
+
+typedef struct file_info {
+	file_info() {
+		IsInvalid = FALSE;
+		IsDirectory = -1;
+		HasNext = TRUE;
+		memset(szFileName, 0, sizeof(szFileName));
+	}
+	BOOL IsInvalid;//是否有效
+	BOOL IsDirectory;//是否为目录 0 否 1 是
+	BOOL HasNext;//是否还有后续 0 没有 1 有
+	char szFileName[256];//文件名
+}FILEINFO, * PFILEINFO;
+
 class CServerSocket
 {
 public:
 	static CServerSocket* getInstance() {
-		if (m_instance == nullptr) {
+		if (m_instance == NULL) {//静态函数没有this指针，所以无法直接访问成员变量
 			m_instance = new CServerSocket();
 		}
 		return m_instance;
 	}
 	bool InitSocket() {
-		if (m_sock == -1) return false;
+		if (m_sock == -1)return false;
 		sockaddr_in serv_adr;
 		memset(&serv_adr, 0, sizeof(serv_adr));
 		serv_adr.sin_family = AF_INET;
 		serv_adr.sin_addr.s_addr = INADDR_ANY;
 		serv_adr.sin_port = htons(9527);
-		if(bind(m_sock, (sockaddr*)&serv_adr, sizeof(serv_adr))==-1) return false;
-		if(listen(m_sock, 1)==-1) return false;
-		return true;
-	}
-	bool AcceptClient() {
-		sockaddr_in clnt_adr;
-		int clnt_adr_sz = sizeof(clnt_adr);
-		m_client = accept(m_sock, (sockaddr*)&clnt_adr, &clnt_adr_sz);
-		if (m_client == -1) return false;
+		//绑定
+		if (bind(m_sock, (sockaddr*)&serv_adr, sizeof(serv_adr)) == -1) {
+			return false;
+		}
+		if (listen(m_sock, 1) == -1) {
+			return false;
+		}
 		return true;
 	}
 
+	bool AcceptClient() {
+		TRACE("enter AcceptClient\r\n");
+		sockaddr_in client_adr;
+		int cli_sz = sizeof(client_adr);
+		m_client = accept(m_sock, (sockaddr*)&client_adr, &cli_sz);
+		TRACE("m_client = %d\r\n", m_client);
+		if (m_client == -1)return false;
+		return true;
+	}
 #define BUFFER_SIZE 4096
 	int DealCommand() {
 		if (m_sock == -1) return -1;
@@ -164,51 +197,84 @@ public:
 		}
 		return -1;
 	}
-	bool Send(const char* pdata, size_t nSize) {
-		if (m_client == -1) return false; // 确保客户端已连接
-		if (send(m_client, pdata, nSize, 0) == -1) return false;
-		return true;
+
+
+	bool Send(const char* pData, int nSize) {
+		if (m_client == -1)return false;
+		return send(m_client, pData, nSize, 0) > 0;
+	}
+	bool Send(CPacket& pack) {
+		if (m_client == -1)return false;
+		//Dump((BYTE*)pack.Data(), pack.Size());
+		return send(m_client, pack.Data(), pack.Size(), 0) > 0;
+	}
+	bool GetFilePath(std::string& strPath) {
+		if (((m_packet.sCmd >= 2) && (m_packet.sCmd <= 4)) ||
+			(m_packet.sCmd == 9))
+		{
+			strPath = m_packet.strData;
+			return true;
+		}
+		return false;
+	}
+	bool GetMouseEvent(MOUSEEV& mouse) {
+		if (m_packet.sCmd == 5) {
+			memcpy(&mouse, m_packet.strData.c_str(), sizeof(MOUSEEV));
+			return true;
+		}
+		return false;
+	}
+	CPacket& GetPacket() {
+		return m_packet;
+	}
+	void CloseClient() {
+		closesocket(m_client);
+		m_client = INVALID_SOCKET;
 	}
 private:
-	SOCKET m_sock;
 	SOCKET m_client;
+	SOCKET m_sock;
 	CPacket m_packet;
+	CServerSocket& operator=(const CServerSocket& ss) {}
+	CServerSocket(const CServerSocket& ss) {
+		m_sock = ss.m_sock;
+		m_client = ss.m_client;
+	}
 	CServerSocket() {
-		m_sock = -1;  // 初始化套接字为无效值
-		m_client = -1; // 初始化客户端套接字为无效值
-		if (InitSockEnv() == false) {
-			MessageBox(NULL,_T("Socket环境初始化失败,检查网络设置"),_T("初始化错误"),MB_OK|MB_ICONERROR);
+		m_client = INVALID_SOCKET;
+		if (InitSockEnv() == FALSE) {
+			MessageBox(NULL, _T("无法初始化套接字环境,请检查网络设置！"), _T("初始化错误！"), MB_OK | MB_ICONERROR);
 			exit(0);
 		}
-		m_sock = socket(AF_INET, SOCK_STREAM, 0);
-		
+		m_sock = socket(PF_INET, SOCK_STREAM, 0);
 	}
-	CServerSocket(const CServerSocket&) = default;
-	CServerSocket& operator=(const CServerSocket&) = default;
 	~CServerSocket() {
 		closesocket(m_sock);
 		WSACleanup();
 	}
 	BOOL InitSockEnv() {
 		WSADATA data;
-		return WSAStartup(MAKEWORD(1, 1), &data) == 0;
+		if (WSAStartup(MAKEWORD(1, 1), &data) != 0) {
+			return FALSE;
+		}
+		return TRUE;
 	}
 	static void releaseInstance() {
-		if (CServerSocket::m_instance) {
-			delete CServerSocket::m_instance;  // 清理单例实例
-			CServerSocket::m_instance = nullptr;
+		if (m_instance != NULL) {
+			CServerSocket* tmp = m_instance;
+			m_instance = NULL;
+			delete tmp;
 		}
 	}
 	static CServerSocket* m_instance;
 	class CHelper {
 	public:
 		CHelper() {
-			CServerSocket::getInstance();  // 确保单例在程序开始时被创建
+			CServerSocket::getInstance();
 		}
 		~CHelper() {
-			releaseInstance();
+			CServerSocket::releaseInstance();
 		}
 	};
-	static CHelper m_helper;  // 静态成员，确保在程序结束时释放单例实例
+	static CHelper m_helper;
 };
-
